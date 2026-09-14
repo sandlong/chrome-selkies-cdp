@@ -1,14 +1,14 @@
 {
   browser: {
     enabled: true,
-    defaultProfile: "chromium-local",
+    defaultProfile: "chrome-local",
     remoteCdpTimeoutMs: 30000,
     remoteCdpHandshakeTimeoutMs: 45000,
     ssrfPolicy: {
       dangerouslyAllowPrivateNetwork: true,
     },
     profiles: {
-      chromium-local: {
+      chrome-local: {
         cdpUrl: "http://127.0.0.1:9222",
         color: "#3B82F6",
       },

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Shim over linuxserver's wrapped-chromium.
+# Shim over linuxserver's wrapped-chrome.
 # Right-click menu / desktop entries call this path; route them through our
 # CDP-aware launcher so ENABLE_CDP keeps the dedicated profile + remote debugging.
-exec /usr/local/bin/start-cdp-chromium.sh "$@"
+exec /usr/local/bin/start-cdp-chrome.sh "$@"

@@ -1,4 +1,4 @@
-Hermes can attach to the local Chromium CDP endpoint exposed by this container.
+Hermes can attach to the local Chrome CDP endpoint exposed by this container.
 
 Typical flow:
 
@@ -14,7 +14,7 @@ Typical flow:
 
    /browser connect ws://127.0.0.1:9222
 
-3. Open the Chromium web UI to watch the live session:
+3. Open the Chrome web UI to watch the live session:
 
    https://127.0.0.1:3001/
 

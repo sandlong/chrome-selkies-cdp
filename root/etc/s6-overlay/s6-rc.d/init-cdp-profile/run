@@ -2,7 +2,7 @@
 # shellcheck shell=bash
 # Prepare CDP profile dirs and force desktop menu entries onto our launcher.
 # Host bind-mounts created by Docker are root-owned; existing volumes may still
-# have menu.xml / menu.xml.bak pointing at bare wrapped-chromium.
+# have menu.xml / menu.xml.bak pointing at bare wrapped-chrome.
 
 set -euo pipefail
 
@@ -22,15 +22,15 @@ if [[ -d /config ]]; then
   lsiown abc:abc /config || chown abc:abc /config || true
 fi
 
-# Point labwc right-click "Chromium" at our launcher on every boot.
+# Point labwc right-click "Chrome" at our launcher on every boot.
 # Upstream init restores menu.xml from menu.xml.bak, so patch both.
 patch_menu_file() {
   local f="$1"
   [[ -f "$f" ]] || return 0
-  if grep -q 'wrapped-chromium' "$f" 2>/dev/null; then
+  if grep -q 'wrapped-chrome' "$f" 2>/dev/null; then
     sed -i \
-      -e 's|/usr/bin/wrapped-chromium --enable-features=UseOzonePlatform --ozone-platform=wayland|/usr/local/bin/start-cdp-chromium.sh --enable-features=UseOzonePlatform --ozone-platform=wayland|g' \
-      -e 's|/usr/bin/wrapped-chromium|/usr/local/bin/start-cdp-chromium.sh|g' \
+      -e 's|/usr/bin/wrapped-chrome --enable-features=UseOzonePlatform --ozone-platform=wayland|/usr/local/bin/start-cdp-chrome.sh --enable-features=UseOzonePlatform --ozone-platform=wayland|g' \
+      -e 's|/usr/bin/wrapped-chrome|/usr/local/bin/start-cdp-chrome.sh|g' \
       "$f"
     chown abc:abc "$f" 2>/dev/null || true
     echo "[init-cdp-profile] patched menu launcher in $f"

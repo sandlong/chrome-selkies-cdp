@@ -10,7 +10,7 @@ set -Eeuo pipefail
 
 CONTAINER_RESTART_CRON="${CONTAINER_RESTART_CRON:-}"
 RESTART_COMMAND="/usr/local/bin/scheduled-container-restart.sh"
-MARKER="# chromium-selkies-cdp: managed container restart"
+MARKER="# chrome-selkies-cdp: managed container restart"
 
 tmp="$(mktemp)"
 trap 'rm -f "$tmp"' EXIT

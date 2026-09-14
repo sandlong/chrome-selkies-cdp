@@ -1,2 +1,2 @@
 #!/bin/bash
-exec /usr/local/bin/start-cdp-chromium.sh --enable-features=UseOzonePlatform --ozone-platform=wayland
+exec /usr/local/bin/start-cdp-chrome.sh --enable-features=UseOzonePlatform --ozone-platform=wayland

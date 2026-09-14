@@ -1,9 +1,9 @@
 services:
-  chromium-selkies-cdp:
+  chrome-selkies-cdp:
     build: .
-    container_name: chromium-selkies-cdp
+    container_name: chrome-selkies-cdp
     ports:
-      - "3001:3001"   # Chromium web UI (HTTPS)
+      - "3001:3001"   # Chrome web UI (HTTPS)
       - "9222:9222"   # CDP, only live when ENABLE_CDP=true
     environment:
       TZ: Asia/Singapore
@@ -17,8 +17,8 @@ services:
       # SELKIES_MANUAL_WIDTH: "1440"
       # SELKIES_MANUAL_HEIGHT: "900"
     volumes:
-      - chromium-config:/config
+      - chrome-config:/config
     restart: unless-stopped
 
 volumes:
-  chromium-config:
+  chrome-config:

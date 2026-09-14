@@ -34,12 +34,12 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Resolve upstream linuxserver/chromium digest tag
+      - name: Resolve upstream linuxserver/chrome digest tag
         id: upstream
         shell: bash
         run: |
           set -euo pipefail
-          raw="$(docker buildx imagetools inspect lscr.io/linuxserver/chromium:latest --raw)"
+          raw="$(docker buildx imagetools inspect lscr.io/linuxserver/chrome:latest --raw)"
           digest="$(printf '%s' "$raw" | sha256sum | awk '{print $1}')"
           short="${digest:0:12}"
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
@@ -76,11 +76,11 @@ jobs:
             type=sha
             type=raw,value=${{ steps.upstream.outputs.tag }}
           labels: |
-            org.opencontainers.image.title=chromium-selkies-cdp
-            org.opencontainers.image.description=Thin downstream of linuxserver/chromium with optional CDP forwarding and scheduled recycle
+            org.opencontainers.image.title=chrome-selkies-cdp
+            org.opencontainers.image.description=Thin downstream of linuxserver/chrome with optional CDP forwarding and scheduled recycle
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
-            org.opencontainers.image.base.name=lscr.io/linuxserver/chromium:latest
+            org.opencontainers.image.base.name=lscr.io/linuxserver/chrome:latest
             org.opencontainers.image.version=${{ steps.upstream.outputs.tag }}
 
       - name: Build and push
@@ -98,4 +98,4 @@ jobs:
 
       - name: Skip note
         if: steps.gate.outputs.should_build != 'true'
-        run: echo "No upstream linuxserver/chromium change detected, scheduled publish skipped."
+        run: echo "No upstream linuxserver/chrome change detected, scheduled publish skipped."
