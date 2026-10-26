@@ -1,0 +1,113 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+# Prepare the optional CDP -> MCP bridge.
+#
+# Runs after upstream init-nginx has regenerated
+# /etc/nginx/sites-available/default from /defaults/default.conf, and before
+# init-services (so before svc-nginx starts). Injects one secret-path location
+# into every server block. Injection happens here, not in /defaults/default.conf,
+# because upstream strips every '#' from the generated config when PASSWORD is set.
+#
+# The marker file is the single switch svc-mcp-bridge reads; any validation
+# failure leaves the browser running and the bridge off.
+
+set -Eeuo pipefail
+
+ENABLE_MCP="${ENABLE_MCP:-false}"
+ENABLE_CDP="${ENABLE_CDP:-false}"
+MCP_SECRET_PATH="${MCP_SECRET_PATH:-}"
+MCP_INTERNAL_PORT="${MCP_INTERNAL_PORT:-8931}"
+MCP_OUTPUT_DIR="${MCP_OUTPUT_DIR:-/config/mcp-output}"
+NGINX_CONFIG=/etc/nginx/sites-available/default
+MARKER_FILE=/run/mcp-bridge.enabled
+TAG="[init-mcp-bridge]"
+
+is_true() {
+  case "${1,,}" in
+    1|true|yes|on) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+rm -f "$MARKER_FILE"
+
+if ! is_true "$ENABLE_MCP"; then
+  echo "$TAG ENABLE_MCP is false; bridge disabled."
+  exit 0
+fi
+
+if ! is_true "$ENABLE_CDP"; then
+  echo "$TAG ERROR: ENABLE_MCP requires ENABLE_CDP=true; bridge disabled." >&2
+  exit 0
+fi
+
+# Strip surrounding slashes so "/abc/" and "abc" both work.
+secret="${MCP_SECRET_PATH#/}"
+secret="${secret%/}"
+if [[ ! "$secret" =~ ^[A-Za-z0-9_-]{24,128}$ ]]; then
+  echo "$TAG ERROR: MCP_SECRET_PATH must be 24-128 chars of [A-Za-z0-9_-]; bridge disabled." >&2
+  exit 0
+fi
+
+if [[ ! "$MCP_INTERNAL_PORT" =~ ^[0-9]{2,5}$ ]]; then
+  echo "$TAG ERROR: MCP_INTERNAL_PORT is not a port number; bridge disabled." >&2
+  exit 0
+fi
+
+if [[ ! -f "$NGINX_CONFIG" ]]; then
+  echo "$TAG ERROR: ${NGINX_CONFIG} not found; bridge disabled." >&2
+  exit 0
+fi
+
+block_file="$(mktemp)"
+backup_file="$(mktemp)"
+trap 'rm -f "$block_file" "$backup_file"' EXIT
+
+cat >"$block_file" <<EOF
+  location /${secret}/ {
+    auth_basic              off;
+    proxy_set_header        Host localhost:${MCP_INTERNAL_PORT};
+    proxy_set_header        X-Real-IP \$remote_addr;
+    proxy_set_header        X-Forwarded-For \$proxy_add_x_forwarded_for;
+    proxy_set_header        X-Forwarded-Proto \$scheme;
+    proxy_set_header        Connection "";
+    proxy_http_version      1.1;
+    proxy_read_timeout      3600s;
+    proxy_send_timeout      3600s;
+    proxy_buffering         off;
+    proxy_request_buffering off;
+    proxy_cache             off;
+    client_max_body_size    10M;
+    proxy_pass              http://127.0.0.1:${MCP_INTERNAL_PORT}/;
+  }
+EOF
+
+cp "$NGINX_CONFIG" "$backup_file"
+
+# Insert the block before each server's error_page directive.
+awk -v blockfile="$block_file" '
+  /^[[:space:]]*error_page[[:space:]]+500/ {
+    while ((getline line < blockfile) > 0) print line
+    close(blockfile)
+    inserted++
+  }
+  { print }
+  END { if (inserted == 0) exit 3 }
+' "$backup_file" >"$NGINX_CONFIG" || {
+  cp "$backup_file" "$NGINX_CONFIG"
+  echo "$TAG ERROR: could not find an insertion point in ${NGINX_CONFIG}; bridge disabled." >&2
+  exit 0
+}
+
+if ! nginx -t >/dev/null 2>&1; then
+  cp "$backup_file" "$NGINX_CONFIG"
+  echo "$TAG ERROR: nginx -t failed after injection; config restored, bridge disabled." >&2
+  nginx -t || true
+  exit 0
+fi
+
+mkdir -p "$MCP_OUTPUT_DIR"
+lsiown abc:abc "$MCP_OUTPUT_DIR" 2>/dev/null || chown abc:abc "$MCP_OUTPUT_DIR"
+
+touch "$MARKER_FILE"
+echo "$TAG bridge enabled on internal port ${MCP_INTERNAL_PORT}; nginx path /<MCP_SECRET_PATH>/mcp injected."

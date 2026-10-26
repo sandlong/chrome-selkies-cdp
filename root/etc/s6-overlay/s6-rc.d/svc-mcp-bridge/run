@@ -1,0 +1,28 @@
+#!/usr/bin/with-contenv bash
+# shellcheck shell=bash
+# Optional CDP -> MCP bridge: Playwright MCP over Streamable HTTP, attached to
+# Chrome's loopback-only DevTools port. Reachable from outside only through the
+# nginx secret-path location written by init-mcp-bridge. The external CDP_PORT
+# forwarder is untouched, so other CDP clients keep working alongside it.
+
+MARKER_FILE=/run/mcp-bridge.enabled
+
+if [[ ! -f "$MARKER_FILE" ]]; then
+  # Disabled or misconfigured: idle instead of exiting so s6 does not respawn-loop.
+  exec sleep infinity
+fi
+
+CDP_INTERNAL_PORT="${CDP_INTERNAL_PORT:-9223}"
+MCP_INTERNAL_PORT="${MCP_INTERNAL_PORT:-8931}"
+MCP_OUTPUT_DIR="${MCP_OUTPUT_DIR:-/config/mcp-output}"
+read -r -a EXTRA_ARGS <<< "${MCP_EXTRA_ARGS:-}"
+
+cd /config || exit 1
+
+exec s6-setuidgid abc env HOME=/config \
+  /usr/local/bin/node /opt/playwright-mcp/node_modules/@playwright/mcp/cli.js \
+    --cdp-endpoint "http://127.0.0.1:${CDP_INTERNAL_PORT}" \
+    --host 127.0.0.1 \
+    --port "${MCP_INTERNAL_PORT}" \
+    --output-dir "${MCP_OUTPUT_DIR}" \
+    "${EXTRA_ARGS[@]}"
