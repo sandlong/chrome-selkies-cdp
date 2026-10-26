@@ -11,6 +11,9 @@ services:
       PASSWORD: change-me
       ENABLE_CDP: "true"
       CDP_PORT: "9222"
+      # Remote MCP bridge at https://<host>:3001/<MCP_SECRET_PATH>/mcp
+      # ENABLE_MCP: "true"
+      # MCP_SECRET_PATH: "generate-with-openssl-rand-hex-24"
       # Standard 5-field cron expression, evaluated in TZ. Requires restart policy below.
       # CONTAINER_RESTART_CRON: "0 4 * * *"
       # CHROME_CLI: "--disable-gpu"

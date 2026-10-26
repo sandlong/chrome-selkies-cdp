@@ -114,8 +114,40 @@ Named volumes also work; the same single-`/config` rule applies.
 | `CDP_PROFILE_DIR` | `/config/cdp-profile` | Profile path used when CDP is enabled |
 | `CDP_LOG_DIR` | `/config/log` | Log directory for the `socat` forwarder |
 | `CONTAINER_RESTART_CRON` | empty (disabled) | Standard 5-field cron schedule for an in-container graceful recycle; uses `TZ` and requires a Docker restart policy |
+| `ENABLE_MCP` | `false` | Enable the remote MCP bridge (requires `ENABLE_CDP=true`) |
+| `MCP_SECRET_PATH` | empty | Secret URL prefix for the bridge, 24-128 chars of `[A-Za-z0-9_-]`; required when `ENABLE_MCP=true` |
+| `MCP_INTERNAL_PORT` | `8931` | Loopback port Playwright MCP listens on inside the container |
+| `MCP_OUTPUT_DIR` | `/config/mcp-output` | Where screenshots/PDFs/traces requested by MCP clients are written |
+| `MCP_EXTRA_ARGS` | empty | Extra flags passed to Playwright MCP unchanged (e.g. `--caps vision,pdf`) |
 
 `CONTAINER_RESTART_CRON` also accepts the usual non-boot aliases `@yearly`, `@annually`, `@monthly`, `@weekly`, `@daily`, `@midnight`, and `@hourly`. `@reboot` is rejected because it would restart the container immediately after every start.
+
+## Remote MCP bridge (optional)
+
+With `ENABLE_MCP=true`, the image also runs [Playwright MCP](https://github.com/microsoft/playwright-mcp) as a Streamable HTTP MCP server attached to the same Chrome over CDP, so remote agents can drive the visible, logged-in browser without speaking CDP themselves.
+
+- Playwright MCP listens on loopback only (`127.0.0.1:$MCP_INTERNAL_PORT`) and connects to Chrome's internal DevTools port.
+- An `init-mcp-bridge` step injects one nginx location, `/<MCP_SECRET_PATH>/`, into the existing Selkies web server on ports `3000`/`3001`. No new port is published.
+- The MCP endpoint is therefore `https://<host>:3001/<MCP_SECRET_PATH>/mcp` (or the same path on whatever already fronts port `3001`).
+- That location turns off the UI's basic auth: **the secret path is the only credential.** Use a long random value and rotate it by changing the env var.
+- The external CDP forwarder on `CDP_PORT` is unchanged, so direct CDP clients keep working alongside MCP clients.
+- If `MCP_SECRET_PATH` is missing or invalid, or `ENABLE_CDP` is off, the bridge stays disabled and the browser starts normally; the reason is logged by `init-mcp-bridge`.
+
+Generate a secret:
+
+```bash
+openssl rand -hex 24
+```
+
+Client config:
+
+```json
+{ "mcpServers": { "chrome": { "url": "https://chrome.example.com/<MCP_SECRET_PATH>/mcp" } } }
+```
+
+Behind Cloudflare Access, add a second self-hosted Access application for the same hostname with path `<MCP_SECRET_PATH>/*` and a single **Bypass / Everyone** policy; the more specific path wins, so the browser UI stays protected.
+
+All MCP sessions and CDP clients share one browser. Concurrent agents can fight over tabs and focus; prefer one active controller at a time.
 
 ## Important upstream variables you will still use
 
