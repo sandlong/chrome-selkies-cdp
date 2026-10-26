@@ -3,7 +3,7 @@
 [![Docker publish](https://github.com/sandlong/chrome-selkies-cdp/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/sandlong/chrome-selkies-cdp/actions/workflows/docker-publish.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](./LICENSE)
 
-A very thin downstream image built on top of `lscr.io/linuxserver/chrome`, with two optional extras: enable Chrome CDP and forward it to port `9222` when requested, and schedule a periodic container recycle from inside the container.
+A very thin downstream image built on top of `lscr.io/linuxserver/chrome`, with three optional extras: enable Chrome CDP and forward it to port `9222`, serve a Streamable HTTP MCP endpoint for the same browser, and schedule a periodic container recycle from inside the container.
 
 ## What changed from upstream
 
@@ -124,14 +124,23 @@ Named volumes also work; the same single-`/config` rule applies.
 
 ## Remote MCP bridge (optional)
 
-With `ENABLE_MCP=true`, the image also runs [Playwright MCP](https://github.com/microsoft/playwright-mcp) as a Streamable HTTP MCP server attached to the same Chrome over CDP, so remote agents can drive the visible, logged-in browser without speaking CDP themselves.
+With `ENABLE_MCP=true` (requires `ENABLE_CDP=true`), the image also runs [Playwright MCP](https://github.com/microsoft/playwright-mcp) as a Streamable HTTP MCP server attached to the same Chrome, so agents can drive the visible, logged-in browser without speaking CDP.
 
-- Playwright MCP listens on loopback only (`127.0.0.1:$MCP_INTERNAL_PORT`) and connects to Chrome's internal DevTools port.
-- An `init-mcp-bridge` step injects one nginx location, `/<MCP_SECRET_PATH>/`, into the existing Selkies web server on ports `3000`/`3001`. No new port is published.
-- The MCP endpoint is therefore `https://<host>:3001/<MCP_SECRET_PATH>/mcp` (or the same path on whatever already fronts port `3001`).
-- That location turns off the UI's basic auth: **the secret path is the only credential.** Use a long random value and rotate it by changing the env var.
-- The external CDP forwarder on `CDP_PORT` is unchanged, so direct CDP clients keep working alongside MCP clients.
-- If `MCP_SECRET_PATH` is missing or invalid, or `ENABLE_CDP` is off, the bridge stays disabled and the browser starts normally; the reason is logged by `init-mcp-bridge`.
+### Port and auth model
+
+| Container endpoint | What it is | Auth |
+| --- | --- | --- |
+| `3000/` (HTTP), `3001/` (HTTPS) | Browser web UI | Basic auth when `PASSWORD` is set |
+| `3000/<MCP_SECRET_PATH>/mcp`, `3001/<MCP_SECRET_PATH>/mcp` | MCP endpoint | None: basic auth is bypassed; the secret path is the only credential |
+| `9222` | Chrome DevTools Protocol | None |
+
+- The MCP route is served by the same web server as the UI; there is no extra port to publish. Requests to any other path, including a wrong secret, never reach the MCP server.
+- Playwright MCP itself listens only on container loopback (`127.0.0.1:$MCP_INTERNAL_PORT`) and is not reachable directly.
+- `MCP_SECRET_PATH` must be 24-128 characters of `[A-Za-z0-9_-]`. Rotate it by changing the env var and recreating the container.
+- If `MCP_SECRET_PATH` is missing or invalid, or `ENABLE_CDP` is off, the bridge stays disabled and the browser starts normally; `init-mcp-bridge` logs the reason.
+- How you expose the endpoint (reverse proxy, tunnel, VPN) is up to you. Since both the MCP route and port `9222` carry full browser control, expose them deliberately.
+
+### Usage
 
 Generate a secret:
 
@@ -139,15 +148,13 @@ Generate a secret:
 openssl rand -hex 24
 ```
 
-Client config:
+Run with `-e ENABLE_MCP=true -e MCP_SECRET_PATH=<secret>` added to the usual flags, then point an MCP client at:
 
 ```json
-{ "mcpServers": { "chrome": { "url": "https://chrome.example.com/<MCP_SECRET_PATH>/mcp" } } }
+{ "mcpServers": { "chrome": { "url": "http://localhost:3000/<MCP_SECRET_PATH>/mcp" } } }
 ```
 
-Behind Cloudflare Access, add a second self-hosted Access application for the same hostname with path `<MCP_SECRET_PATH>/*` and a single **Bypass / Everyone** policy; the more specific path wins, so the browser UI stays protected.
-
-All MCP sessions and CDP clients share one browser. Concurrent agents can fight over tabs and focus; prefer one active controller at a time.
+MCP sessions and CDP clients share one browser. Concurrent agents can fight over tabs and focus; prefer one active controller at a time.
 
 ## Important upstream variables you will still use
 
@@ -164,4 +171,4 @@ All MCP sessions and CDP clients share one browser. Concurrent agents can fight 
 
 This repo intentionally does not fork or reimplement the upstream desktop stack. It only layers a CDP-on-demand wrapper on top of `linuxserver/chrome` so upstream updates remain easy to track.
 
-CDP access is effectively full browser control. Do not expose port `9222` directly to the public internet.
+CDP and the MCP endpoint are both effectively full browser control. Do not expose port `9222` directly to the public internet, and keep `MCP_SECRET_PATH` as secret as a password.
