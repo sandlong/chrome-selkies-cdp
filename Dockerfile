@@ -1,9 +1,13 @@
 # Optional CDP -> MCP bridge (Microsoft Playwright MCP, Streamable HTTP).
 # Built in a throwaway Node stage; only the node binary and the installed
-# package tree are copied into the final image. Bump the version deliberately.
+# package tree are copied into the final image.
+# CI resolves the newest @playwright/mcp release and passes it here as an exact
+# version, so the cached layer is reused until upstream ships a new release.
+# Local builds default to the "latest" dist-tag; that literal never changes, so
+# use --no-cache (or pass --build-arg PLAYWRIGHT_MCP_VERSION=x.y.z) to refresh.
 FROM node:22-bookworm-slim AS mcp
 
-ARG PLAYWRIGHT_MCP_VERSION=0.0.83
+ARG PLAYWRIGHT_MCP_VERSION=latest
 ENV PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 
 RUN npm install \

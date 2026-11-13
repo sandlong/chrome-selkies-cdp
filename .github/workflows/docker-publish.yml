@@ -45,6 +45,20 @@ jobs:
           echo "digest=$digest" >> "$GITHUB_OUTPUT"
           echo "tag=upstream-$short" >> "$GITHUB_OUTPUT"
 
+      - name: Resolve latest @playwright/mcp release
+        id: mcp
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(npm view @playwright/mcp version)"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "Unexpected @playwright/mcp version: '$version'" >&2
+            exit 1
+          fi
+          echo "Resolved @playwright/mcp $version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "key=${{ steps.upstream.outputs.tag }}-mcp-$version" >> "$GITHUB_OUTPUT"
+
       - name: Decide whether build is needed
         id: gate
         shell: bash
@@ -54,8 +68,8 @@ jobs:
             echo "should_build=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          if docker manifest inspect ghcr.io/${{ github.repository }}:${{ steps.upstream.outputs.tag }} >/dev/null 2>&1; then
-            echo "Image tag ghcr.io/${{ github.repository }}:${{ steps.upstream.outputs.tag }} already exists, skipping scheduled rebuild."
+          if docker manifest inspect ghcr.io/${{ github.repository }}:${{ steps.mcp.outputs.key }} >/dev/null 2>&1; then
+            echo "Image tag ghcr.io/${{ github.repository }}:${{ steps.mcp.outputs.key }} already exists, skipping scheduled rebuild."
             echo "should_build=false" >> "$GITHUB_OUTPUT"
           else
             echo "should_build=true" >> "$GITHUB_OUTPUT"
@@ -75,13 +89,15 @@ jobs:
             type=ref,event=tag
             type=sha
             type=raw,value=${{ steps.upstream.outputs.tag }}
+            type=raw,value=${{ steps.mcp.outputs.key }}
           labels: |
             org.opencontainers.image.title=chrome-selkies-cdp
             org.opencontainers.image.description=Thin downstream of linuxserver/chrome with optional CDP forwarding and scheduled recycle
             org.opencontainers.image.source=https://github.com/${{ github.repository }}
             org.opencontainers.image.licenses=MIT
             org.opencontainers.image.base.name=lscr.io/linuxserver/chrome:latest
-            org.opencontainers.image.version=${{ steps.upstream.outputs.tag }}
+            org.opencontainers.image.version=${{ steps.mcp.outputs.key }}
+            io.github.sandlong.playwright-mcp.version=${{ steps.mcp.outputs.version }}
 
       - name: Build and push
         uses: docker/build-push-action@v6
@@ -93,9 +109,11 @@ jobs:
           provenance: false
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            PLAYWRIGHT_MCP_VERSION=${{ steps.mcp.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
 
       - name: Skip note
         if: steps.gate.outputs.should_build != 'true'
-        run: echo "No upstream linuxserver/chrome change detected, scheduled publish skipped."
+        run: echo "No new linuxserver/chrome digest or @playwright/mcp release, scheduled publish skipped."
